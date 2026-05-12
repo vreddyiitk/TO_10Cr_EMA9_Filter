@@ -1,6 +1,7 @@
 name: Stock_Charts_10Cr
+
 on:
-  workflow_dispatch:           # manual trigger any time
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -8,126 +9,58 @@ permissions:
 jobs:
   generate-charts:
     runs-on: ubuntu-latest
-    timeout-minutes: 120       # NSE download + 500 stock scans can take a while
 
     steps:
-      # ── 1. Checkout ──────────────────────────────────────────────────────────
       - name: Checkout repo
         uses: actions/checkout@v4.2.2
 
-      # ── 2. Chrome (stable, matches webdriver-manager's driver) ───────────────
-      - name: Install Google Chrome
+      - name: Install Chrome
         run: |
-          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub \
-            | sudo apt-key add -
-          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" \
-            | sudo tee /etc/apt/sources.list.d/google-chrome.list
+          wget -q -O - https://dl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" | sudo tee /etc/apt/sources.list.d/google-chrome.list
           sudo apt-get update -q
           sudo apt-get install -y google-chrome-stable
-          google-chrome --version
 
-      # ── 3. Python ─────────────────────────────────────────────────────────────
-      - name: Set up Python 3.11
+      - name: Set up Python
         uses: actions/setup-python@v5.4.0
         with:
           python-version: '3.11'
 
-      # ── 4. Python deps ────────────────────────────────────────────────────────
-      - name: Install Python dependencies
-        run: |
-          pip install --upgrade pip
-          pip install \
-            yfinance \
-            pandas \
-            openpyxl \
-            matplotlib \
-            selenium \
-            webdriver-manager
+      - name: Install dependencies
+        run: pip install yfinance pandas openpyxl matplotlib selenium webdriver-manager
 
-      # ── 5. Run the pipeline ───────────────────────────────────────────────────
-      #    * No --visible flag → script defaults to headless=True
-      #    * DISPLAY not needed for headless=new Chrome
-      #    * WDM_LOG=0 suppresses noisy webdriver-manager logs
-      - name: Run NSE pipeline (headless)
-        env:
-          WDM_LOG: "0"
-          WDM_PROGRESS_BAR: "0"
+      - name: Run chart generator
         run: python TO_Screener.py
-        # If you have a saved CSV and want to skip the browser entirely:
-        # run: python MC_10Cr_Above_D.py --from-csv StocksTraded.csv
 
-      # ── 6. Show what was produced ─────────────────────────────────────────────
-      - name: Check output folders
+      - name: Check charts output
         run: |
-          echo "=== Workspace root ==="
+          echo "=== Current directory ==="
           ls -la
-          echo ""
-          echo "=== NSE_EMA9_Triple_Charts/ ==="
-          ls -la NSE_EMA9_Triple_Charts/ \
-            || echo "NSE_EMA9_Triple_Charts/ does not exist — no stocks passed all 3 filters"
-          echo ""
-          echo "=== CSV outputs ==="
-          ls -lh nse_all_stocks.csv        2>/dev/null || echo "nse_all_stocks.csv not found"
-          ls -lh nse_value_filtered.csv    2>/dev/null || echo "nse_value_filtered.csv not found"
-          ls -lh nse_ema9_rejected.csv     2>/dev/null || echo "nse_ema9_rejected.csv not found"
+          echo "=== Charts folder ==="
+          ls -la NSE_Filtered_Charts/ || echo "NSE_Filtered_Charts/ folder does not exist!"
 
-      # ── 7. Zip charts (exit gracefully if folder is empty / absent) ───────────
-      - name: Zip charts
+      - name: Zip charts folder
         run: |
-          FOLDER="NSE_EMA9_Triple_Charts"
-          DATE=$(date +'%Y-%m-%d')
-          ZIP_NAME="charts_NSE_10Cr_EMA9_${DATE}.zip"
-
-          if [ -d "$FOLDER" ] && [ "$(ls -A "$FOLDER" 2>/dev/null)" ]; then
+          FOLDER="NSE_Filtered_Charts"
+          if [ -d "$FOLDER" ] && [ "$(ls -A $FOLDER)" ]; then
             cd "$FOLDER"
+            ZIP_NAME="charts_NSE_10Cr_$(date +'%Y-%m-%d').zip"
             zip -j "../${ZIP_NAME}" *.png
             cd ..
             echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
-            echo "HAS_CHARTS=true"     >> "$GITHUB_ENV"
-            echo "Created: ${ZIP_NAME}  ($(ls -lh ${ZIP_NAME} | awk '{print $5}'))"
+            echo "Created: ${ZIP_NAME}"
+            ls -lh "${ZIP_NAME}"
           else
-            echo "No charts produced — no stocks passed the triple EMA9 filter today."
-            echo "HAS_CHARTS=false" >> "$GITHUB_ENV"
-            # Create a placeholder zip so the release step has something to attach
-            ZIP_NAME="no_charts_${DATE}.zip"
-            echo "No stocks passed the Daily + Weekly + Monthly EMA9 filter on ${DATE}." \
-              > no_charts_today.txt
-            zip "${ZIP_NAME}" no_charts_today.txt
-            echo "ZIP_NAME=${ZIP_NAME}" >> "$GITHUB_ENV"
+            echo "ERROR: $FOLDER folder is empty or missing"
+            ls -la
+            exit 1
           fi
 
-      # ── 8. Bundle CSVs into the same zip (always present) ────────────────────
-      - name: Add CSV reports to zip
-        run: |
-          ZIP="${{ env.ZIP_NAME }}"
-          for f in nse_all_stocks.csv nse_value_filtered.csv nse_ema9_rejected.csv; do
-            [ -f "$f" ] && zip -j "$ZIP" "$f" && echo "Added $f" || true
-          done
-          echo "Final zip contents:"
-          unzip -l "$ZIP" | tail -20
-
-      # ── 9. Publish as a GitHub Release ───────────────────────────────────────
-      - name: Create GitHub Release
+      - name: Create GitHub Release with charts
         uses: softprops/action-gh-release@v2.2.1
         with:
-          tag_name: "charts-NSE-10Cr-EMA9-${{ github.run_number }}"
-          name: "NSE 10Cr + Triple EMA9 — Run ${{ github.run_number }}"
-          body: |
-            ## NSE Pipeline — ${{ github.run_number }}
-
-            **Filter criteria applied:**
-            1. EQ series stocks with Traded Value > ₹10 Crores
-            2. Daily Close > Daily EMA9
-            3. Daily Close > Weekly EMA9
-            4. Daily Close > Monthly EMA9
-
-            **Attached files:**
-            - `charts_NSE_10Cr_EMA9_*.zip` — PNG charts for stocks passing all filters
-            - `nse_all_stocks.csv` — full NSE download
-            - `nse_value_filtered.csv` — after ₹10 Cr value filter
-            - `nse_ema9_rejected.csv` — stocks rejected by EMA9 filter (with reasons)
-
-            > Triggered: ${{ github.event_name }} | Run: ${{ github.run_number }}
+          tag_name: charts-NSE-10Cr-${{ github.run_number }}
+          name: "NSE 10Cr Filter - Run ${{ github.run_number }}"
           files: ${{ env.ZIP_NAME }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
