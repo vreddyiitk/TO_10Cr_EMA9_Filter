@@ -61,7 +61,7 @@ warnings.filterwarnings("ignore")
 #  CONFIG  — edit these to change behaviour
 # ═══════════════════════════════════════════════════════════════
 
-TRADED_VALUE_MIN_CR = 10      # Step 2 filter: traded value threshold (₹ Cr)
+TRADED_VALUE_MIN_CR = 5      # Step 2 filter: traded value threshold (₹ Cr)
 
 NSE_HOME  = "https://www.nseindia.com"
 NSE_PAGE  = "https://www.nseindia.com/market-data/stocks-traded"
