@@ -75,7 +75,7 @@ API_SETTLE    = 10
 DOWNLOAD_WAIT = 40
 
 EXCHANGE_SFX      = ".NS"
-OUTPUT_DIR        = "NSE_EMA9_Triple_Charts"
+OUTPUT_DIR        = "NSE_Filtered_Charts"
 PERIOD_DAYS       = 365       # daily chart lookback (~250 bars)
 
 EMA_PERIOD        = 9
