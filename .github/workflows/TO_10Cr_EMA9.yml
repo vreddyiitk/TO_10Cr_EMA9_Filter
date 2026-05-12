@@ -1,7 +1,5 @@
 name: Stock_Charts_10Cr
 on:
-  schedule:
-    - cron: '30 10 * * 1-5'   # 4:00 PM IST (10:30 UTC), Mon–Fri
   workflow_dispatch:           # manual trigger any time
 
 permissions:
