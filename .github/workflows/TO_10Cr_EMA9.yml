@@ -52,7 +52,7 @@ jobs:
         env:
           WDM_LOG: "0"
           WDM_PROGRESS_BAR: "0"
-        run: python MC_10Cr_Above_D.py
+        run: python TO_Screener.py
         # If you have a saved CSV and want to skip the browser entirely:
         # run: python MC_10Cr_Above_D.py --from-csv StocksTraded.csv
 
